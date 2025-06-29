@@ -1,0 +1,59 @@
+# Proxmox API Credentials
+# proxmox_url                = "https://<your-proxmox-ip>:8006/api2/json"
+# proxmox_api_token_id     = "terraform@pve!my-token"
+# proxmox_api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Network Configuration
+# network_gateway = "192.168.1.1"
+
+# SSH Public Key
+# ssh_public_key = "ssh-rsa AAAA..."
+
+# Virtual Machine Definitions
+vms = {
+  "control-plane" = {
+    name        = "k8s-control-plane-01"
+    cores       = 2
+    sockets     = 1
+    memory      = 4096  # 4GB
+    disk_size   = "50G"
+    ip_address  = "192.168.1.10"
+    description = "Kubernetes Control Plane Node"
+  },
+  "worker-1" = {
+    name        = "k8s-worker-01"
+    cores       = 2
+    sockets     = 1
+    memory      = 8192  # 8GB
+    disk_size   = "100G"
+    ip_address  = "192.168.1.11"
+    description = "Kubernetes Worker Node 1"
+  },
+  "worker-2" = {
+    name        = "k8s-worker-02"
+    cores       = 2
+    sockets     = 1
+    memory      = 8192  # 8GB
+    disk_size   = "100G"
+    ip_address  = "192.168.1.12"
+    description = "Kubernetes Worker Node 2"
+  },
+  "postgresql" = {
+    name        = "postgresql-01"
+    cores       = 2
+    sockets     = 1
+    memory      = 4096  # 4GB
+    disk_size   = "100G"
+    ip_address  = "192.168.1.20"
+    description = "PostgreSQL Server"
+  },
+  "nfs" = {
+    name        = "nfs-server-01"
+    cores       = 1
+    sockets     = 1
+    memory      = 2048  # 2GB
+    disk_size   = "200G"
+    ip_address  = "192.168.1.21"
+    description = "NFS Server"
+  }
+}
