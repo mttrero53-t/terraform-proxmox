@@ -1,13 +1,22 @@
-# Proxmox API Credentials
-# proxmox_url                = "https://<your-proxmox-ip>:8006/api2/json"
-# proxmox_api_token_id     = "terraform@pve!my-token"
-# proxmox_api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_url                = "https://192.168.0.11:8006/api2/json"
+proxmox_api_token_id       = "root@pam!uritoshtomo"
+proxmox_api_token_secret   = "c7b6602b-c3d9-49f4-b554-01e0970fbe8f"
+
+# Proxmox Configuration
+proxmox_node     = "prx"
+vm_template_id   = 9000  # テンプレートのID（数値）
+storage_pool     = "local-lvm"
+network_bridge   = "vmbr0"
 
 # Network Configuration
-# network_gateway = "192.168.1.1"
+network_gateway = "192.168.0.1"
 
-# SSH Public Key
-# ssh_public_key = "ssh-rsa AAAA..."
+# VM User Configuration
+vm_username = "ubuntu"
+# vm_user_password = "Passw0rd"  # オプション
+
+# SSH Public Key (ファイルパス)
+ssh_public_key = "~/.ssh/id_rsa.pub"
 
 # Virtual Machine Definitions
 vms = {
@@ -15,45 +24,45 @@ vms = {
     name        = "k8s-control-plane-01"
     cores       = 2
     sockets     = 1
-    memory      = 4096  # 4GB
-    disk_size   = "50G"
-    ip_address  = "192.168.1.10"
+    memory      = 4096  # MB
+    disk_size   = 50    # GB
+    ip_address  = "192.168.0.12"
     description = "Kubernetes Control Plane Node"
   },
   "worker-1" = {
     name        = "k8s-worker-01"
     cores       = 2
     sockets     = 1
-    memory      = 8192  # 8GB
-    disk_size   = "100G"
-    ip_address  = "192.168.1.11"
+    memory      = 8192  # MB
+    disk_size   = 100   # GB
+    ip_address  = "192.168.0.13"
     description = "Kubernetes Worker Node 1"
   },
   "worker-2" = {
     name        = "k8s-worker-02"
     cores       = 2
     sockets     = 1
-    memory      = 8192  # 8GB
-    disk_size   = "100G"
-    ip_address  = "192.168.1.12"
+    memory      = 8192  # MB
+    disk_size   = 100   # GB
+    ip_address  = "192.168.0.14"
     description = "Kubernetes Worker Node 2"
   },
   "postgresql" = {
     name        = "postgresql-01"
     cores       = 2
     sockets     = 1
-    memory      = 4096  # 4GB
-    disk_size   = "100G"
-    ip_address  = "192.168.1.20"
+    memory      = 4096  # MB
+    disk_size   = 100   # GB
+    ip_address  = "192.168.0.15"
     description = "PostgreSQL Server"
   },
   "nfs" = {
     name        = "nfs-server-01"
     cores       = 1
     sockets     = 1
-    memory      = 2048  # 2GB
-    disk_size   = "200G"
-    ip_address  = "192.168.1.21"
+    memory      = 2048  # MB
+    disk_size   = 200   # GB
+    ip_address  = "192.168.0.16"
     description = "NFS Server"
   }
 }
