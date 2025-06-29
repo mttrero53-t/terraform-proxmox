@@ -1,0 +1,210 @@
+- name: Install K3s Control Plane
+  hosts: control_plane
+  become: yes
+  vars_files:
+    - ../group_vars/all/vars.yml
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+    k3s_token: "{{ vault_k3s_token }}"
+    k3s_data_dir: "/var/lib/rancher/k3s"
+    k3s_config_dir: "/etc/rancher/k3s"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+    # K3sが既にインストールされている場合は停止
+    - name: Stop existing K3s service if running
+      systemd:
+        name: k3s
+        state: stopped
+      ignore_errors: yes
+
+    - name: Create k3s config directory
+      file:
+        path: "{{ k3s_config_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create k3s config file
+      copy:
+        content: |
+          # K3s server configuration
+          cluster-init: true
+          disable:
+            - traefik
+          write-kubeconfig-mode: "0644"
+          tls-san:
+            - "{{ ansible_host }}"
+            - "{{ inventory_hostname }}"
+          #node-label:
+          # - "node-role.kubernetes.io/control-plane=true"
+          flannel-backend: "vxlan"
+          # APIサーバーの起動を待機するための設定
+          kube-apiserver-arg:
+            - "audit-log-maxage=30"
+            - "audit-log-maxbackup=3"
+            - "audit-log-maxsize=100"
+        dest: "{{ k3s_config_dir }}/config.yaml"
+        mode: '0644'
+
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: '0755'
+
+    - name: Install K3s server
+      shell: |
+        INSTALL_K3S_VERSION="{{ k3s_version }}" \
+        K3S_TOKEN="{{ k3s_token }}" \
+        INSTALL_K3S_EXEC="server --config {{ k3s_config_dir }}/config.yaml" \
+        sh /tmp/k3s-install.sh
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Start and enable K3s service
+      systemd:
+        name: k3s
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    # より長い待機時間とヘルスチェック
+    - name: Wait for K3s API server to be ready
+      uri:
+        url: "https://127.0.0.1:6443/readyz"
+        method: GET
+        validate_certs: no
+        status_code: [200, 401]  # 401も正常（認証が必要だが起動している）
+      register: k3s_ready
+      retries: 30
+      delay: 10
+      until: k3s_ready.status in [200, 401]
+      ignore_errors: yes
+
+    # K3sサービスの状態確認
+    - name: Check K3s service status
+      systemd:
+        name: k3s
+      register: k3s_service_status
+
+    - name: Display K3s service status
+      debug:
+        msg: "K3s service is {{ k3s_service_status.status.ActiveState }}"
+
+    # ログ確認（デバッグ用）
+    - name: Check K3s logs for errors
+      shell: journalctl -u k3s --no-pager -n 20
+      register: k3s_logs
+      ignore_errors: yes
+
+    - name: Display K3s logs
+      debug:
+        msg: "{{ k3s_logs.stdout_lines }}"
+      when: k3s_logs is defined
+
+    # より堅牢な K3s 検証
+    - name: Verify K3s installation with extended retry
+      shell: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        k3s kubectl get nodes --request-timeout=30s
+      register: k3s_nodes
+      changed_when: false
+      retries: 20
+      delay: 15
+      until: k3s_nodes.rc == 0
+      ignore_errors: yes
+
+    # 失敗した場合の追加デバッグ情報
+    - name: Additional debugging if verification failed
+      block:
+        - name: Check if K3s binary exists
+          stat:
+            path: /usr/local/bin/k3s
+          register: k3s_binary
+
+        - name: Check kubeconfig file
+          stat:
+            path: /etc/rancher/k3s/k3s.yaml
+          register: kubeconfig_file
+
+        - name: Display debug info
+          debug:
+            msg:
+              - "K3s binary exists: {{ k3s_binary.stat.exists }}"
+              - "Kubeconfig exists: {{ kubeconfig_file.stat.exists }}"
+              - "Service status: {{ k3s_service_status.status.ActiveState }}"
+
+        - name: Try alternative kubectl command
+          shell: /usr/local/bin/k3s kubectl get nodes --kubeconfig=/etc/rancher/k3s/k3s.yaml
+          register: alt_kubectl
+          ignore_errors: yes
+
+        - name: Display alternative kubectl result
+          debug:
+            msg: "Alternative kubectl result: {{ alt_kubectl }}"
+      when: k3s_nodes.rc != 0
+
+    - name: Create .kube directory for ubuntu user
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+      when: k3s_nodes.rc == 0
+
+    - name: Copy kubeconfig to ubuntu user
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /home/ubuntu/.kube/config
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+        remote_src: yes
+      when: k3s_nodes.rc == 0
+
+    - name: Update kubeconfig server address
+      replace:
+        path: /home/ubuntu/.kube/config
+        regexp: 'https://127\.0\.0\.1:6443'
+        replace: 'https://{{ ansible_host }}:6443'
+      become_user: ubuntu
+      when: k3s_nodes.rc == 0
+
+    - name: Get cluster token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_node_token
+      when: k3s_nodes.rc == 0
+
+    - name: Display node token
+      debug:
+        msg: "K3s Node Token: {{ k3s_node_token.content | b64decode | trim }}"
+      when: k3s_nodes.rc == 0
+
+    - name: Display cluster nodes
+      debug:
+        msg: "{{ k3s_nodes.stdout_lines }}"
+      when: k3s_nodes.rc == 0 and k3s_nodes.stdout_lines is defined
+
+    # 最終的な成功/失敗の判定
+    - name: Final installation status
+      debug:
+        msg: "K3s installation {{ 'completed successfully' if k3s_nodes.rc == 0 else 'failed - check logs above' }}"
